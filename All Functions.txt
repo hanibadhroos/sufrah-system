@@ -1,0 +1,558 @@
+جميل — سأحدد لك بشكل مفصّل وواضح **العمليات (الوظائف)** لكل نوع مستخدم في النظام: **admin**, **tenant (مالك/مدير المحل)**, **tenant customer (زبون التينانت)**، و **tenant employee (موظف التينانت)** — مع اقتراحات لأسماء الصلاحيات (permission strings)، نقاط حماية (middleware/policies)، وملحوظات تصميمية لتنفيذها عمليًا باستخدام `spatie/laravel-permission` وشرح قصير لكيفية تطبيق العزل الخاص بالـ tenant.
+
+---
+
+# ملخّص سريع (فكرة عامة)
+
+* **Admin**: صلاحيات على مستوى النظام كله — إدارة التينانتس، المستخدمين، الإعدادات العامة، تقارير إجمالية، دفعيات، مراقبة.
+* **Tenant (مالك/مدير)**: مسؤول عن كل ما يتعلق بتينانت واحد — المنتجات/الخدمات، الموظفين، الطلبات، التقارير والإعدادات الخاصة بالتينانت.
+* **Tenant Employee**: صلاحيات داخل التينانت المحدد — إدارة الطلبات، إدارة المنتجات بحسب صلاحياته، رؤية تقارير محدودة، تنفيذ مهام يومية.
+* **Tenant Customer**: زبون التينانت — إنشاء طلبات/حجوزات، متابعة الطلبات، دفع، مراجعات، الملف الشخصي.
+
+---
+
+# 1) Admin — (صلاحيات شاملة على مستوى الـ platform)
+
+**وظائف رئيسية**
+
+* إدارة جميع التينانتس (CRUD tenants).
+* إدارة المستخدمين على مستوى النظام (create/edit/delete any user).
+* إعدادات النظام العامة (لوغو، بوابات دفع، سياسات، إعدادات البريد).
+* مشاهدة تقارير ومؤشرات أداء إجمالية (إيرادات عبر كل التينانتس، عدد المستخدمين).
+* إدارة الفواتير والدفعيات (refunds, payouts).
+* مراقبة السجلات (logs / audit), إدارة مشكلات الدعم.
+* إدارة الصلاحيات والأدوار (إنشاء/تعديل أدوار وصلاحيات).
+
+**أمثلة على صلاحيات (permission names)**
+
+```
+system.tenants.view
+system.tenants.create
+system.tenants.update
+system.tenants.delete
+
+system.users.manage
+system.settings.manage
+system.reports.view
+system.payments.manage
+system.roles.manage
+```
+
+**حماية/ملاحظات**
+
+* استخدام `middleware(['role:admin'])` أو `permission:system.tenants.*`.
+* واجهة Admin لوحة مركزية (Dashboard) مع إمكانيات البحث/فلتر عبر جميع التينانتس.
+* Admin لا يجب أن يُعطى صلاحيات تدخل مباشرة في بيانات التينانتس إلا عند الحاجة (عزل البيانات).
+
+---
+
+# 2) Tenant — (مالك/مدير المحل — نطاق محدود بالـ tenant)
+
+**وظائف رئيسية**
+
+* إدارة بيانات التينانت (الاسم، اللوكيشن، سياسات الإلغاء، وسائل الدفع الخاصة بالتينانت).
+* إدارة المنتجات/القوائم/خدمات التينانت (CRUD).
+* إدارة الموظفين (دعوات، أدوار داخل التينانت).
+* مشاهدة وإدارة الطلبات/الحجوزات/المبيعات الخاصة بالتينانت.
+* إعداد العروض والقسائم (coupons).
+* رؤية تقارير مالية وعمليات (مبيعات يومية/أسبوعية/شهرية)، تنزيل فواتير.
+* إعدادات نقاط البيع، ساعات العمل، إعدادات إشعارات.
+* إدارة العملاء الموثقين (الزبائن) ومجموعات الولاء.
+
+**أمثلة صلاحيات**
+
+```
+tenant.products.view
+tenant.products.create
+tenant.products.update
+tenant.products.delete
+
+tenant.orders.view
+tenant.orders.manage
+tenant.employees.manage
+tenant.coupons.manage
+tenant.reports.view
+tenant.settings.update
+```
+
+**ملاحظات تنفيذية**
+
+* الصلاحيات هذه يجب أن تُقيَّم في **سياق التينانت** — أي قاعدة تحقق (`policy` أو middleware) يجب أن تتأكد أن `user->tenant_id === resource->tenant_id`.
+* عادة نقوم بعمل أدوار تابعة للتينانت: `tenant_owner`, `tenant_manager` (يمكن أن يكونا نفس دور `tenant` في spatie).
+* واجهة Tenant تحوي لوحة تحكم خاصة بالتينانت فقط.
+
+---
+
+# 3) Tenant Employee — (الموظف داخل التينانت)
+
+**وظائف رئيسية (نماذج متدرجة حسب مستوى الموظف)**
+
+* رؤية وإدارة الطلبات الواردة (قبول/رفض/تحديث حالة - preparing/served/delivered).
+* إدارة المنتجات/القوائم (إنشاء/تعديل/حذف) — لكن غالبًا بصلاحيات محدودة أو حسب دور الموظف.
+* تسجيل المدفوعات داخل المحل، طباعة الفواتير.
+* مشاهدة تقارير بسيطة (مبيعات يومية للوردية).
+* تحديث حالة الطلب للعملية (مثلاً: assign to kitchen, mark ready).
+* التواصل مع الزبائن (رسائل/حالة الطلب).
+
+**أمثلة صلاحيات**
+
+```
+tenant.employee.orders.view
+tenant.employee.orders.update_status
+tenant.employee.products.update
+tenant.employee.reports.view_limited
+tenant.employee.customers.view
+```
+
+**ملاحظات**
+
+* يمكن إنشاء أدوار متعددة للموظفين: `employee_admin` (مدير الصالة)، `employee_kitchen`, `employee_waiter`، كل دور بصلاحيات محددة.
+* يجب حصر كل موظف داخل `tenant_id` واحد أو قائمة تينانتس إذا موظف يعمل على أكثر من تينانت.
+
+---
+
+# 4) Tenant Customer — (زبون التينانت)
+
+**وظائف رئيسية**
+
+* إنشاء طلب/حجز/شراء من التينانت.
+* مشاهدة حالـة الطلب، وتتبع التوصيل.
+* إدارة الملف الشخصي، العناوين، طرق الدفع المحفوظة.
+* تقييم المنتجات وكتابة مراجعات.
+* رؤية تاريخ الطلبات والفواتير.
+* استخدام كوبونات/نقاط ولاء.
+
+**أمثلة صلاحيات**
+
+```
+customer.orders.create
+customer.orders.view_own
+customer.profile.manage
+customer.reviews.create
+customer.payments.make
+```
+
+**ملاحظات**
+
+* قيود مهمة: الزبون يستطيع فقط رؤية/تحرير بياناته وطلباته الخاصة (scoped).
+* استخدم Policies للتحقق من ملكية المورد (resource->user\_id === auth()->id()).
+
+---
+
+# خريطة الصلاحيات المقترحة (ملف بسيط)
+
+مثال أسماء صلاحيات يمكنك إنشاؤها عبر seeder:
+
+```
+system.tenants.view
+system.tenants.create
+system.tenants.update
+system.tenants.delete
+
+tenant.products.view
+tenant.products.create
+tenant.products.update
+tenant.products.delete
+
+tenant.orders.view
+tenant.orders.manage
+tenant.orders.update_status
+
+tenant.employees.manage
+
+customer.orders.create
+customer.orders.view_own
+customer.reviews.create
+```
+
+---
+
+# مثال عملي — Seeder مبسّط لإنشاء الأدوار والصلاحيات (مثال PHP)
+
+```php
+use Spatie\Permission\Models\Role;
+use Spatie\Permission\Models\Permission;
+
+// أنشئ بعض الصلاحيات
+Permission::create(['name' => 'system.tenants.manage']);
+Permission::create(['name' => 'tenant.products.manage']);
+Permission::create(['name' => 'tenant.orders.manage']);
+Permission::create(['name' => 'tenant.employees.manage']);
+Permission::create(['name' => 'customer.orders.create']);
+
+// أنشئ الأدوار وامنحهم صلاحيات
+$admin = Role::create(['name' => 'admin']);
+$admin->givePermissionTo(['system.tenants.manage']);
+
+$tenant = Role::create(['name' => 'tenant']);
+$tenant->givePermissionTo(['tenant.products.manage','tenant.orders.manage','tenant.employees.manage']);
+
+$employee = Role::create(['name' => 'tenant_employee']);
+$employee->givePermissionTo(['tenant.orders.manage']);
+
+$customer = Role::create(['name' => 'tenant_customer']);
+$customer->givePermissionTo(['customer.orders.create']);
+```
+
+---
+
+# توصيات تقنية وتنفيذية (مهمة)
+
+1. **عزل التينانت (Tenant scoping):**
+
+   * لا تعتمد فقط على صلاحيات Spatie للوصول للموارد، بل **اجمع بين Spatie وPolicies** التي تتأكد من `user->tenant_id === resource->tenant_id`.
+   * مثلاً `OrderPolicy@view` يتأكد من نفس الـ tenant أو ملكية الطلب.
+
+2. **إدارة دور داخل التينانت:**
+
+   * يمكنك جعل `role` عام (global) مثل `tenant_employee`، ويمكنك إضافة عمود `tenant_id` في جدول `model_has_roles` لو احتجت تقييد الدور بتينانت محدد (حل مخصص).
+   * أسهل وأأمن: احتفظ بعلاقة `user->tenant_id` وتحقق في البوليصيات.
+
+3. **تجزئة الأدوار:**
+
+   * لا تخلط بين صلاحيات system-wide وtenant-wide — اجعل أسماء الصلاحيات واضحة (`system.*` vs `tenant.*` vs `customer.*`).
+
+4. **Middleware/Routes:**
+
+   * استخدم:
+
+     * `->middleware(['role:admin'])` لمسارات الإدارة.
+     * `->middleware(['permission:tenant.orders.manage'])` للمسارات المتعلقة بأوامر التينانت.
+   * أو اصنع middleware مخصص يتحقق من Tenant scope.
+
+5. **UI/UX:**
+
+   * لكل دور لوحة تحكم مخصصة تعرض فقط الوظائف المتاحة.
+   * إذا دخل مستخدم يملك أكثر من دور، اعرض له قائمة التبديل (Switch context) إن لزم.
+
+6. **Audit & Logging:**
+
+   * فعّل سجل النشاطات (activity logs) للعمليات الحساسة (حذف منتج، مصادقة دفع، تعديل إعدادات).
+
+---
+
+# مثال mapping سريعة بين وظيفتك والـ endpoints المقترحة
+
+* Admin:
+
+  * GET `/admin/tenants` — view tenants
+  * POST `/admin/tenants` — create tenant
+* Tenant:
+
+  * GET `/tenant/products` — list products
+  * POST `/tenant/products` — create product
+  * GET `/tenant/orders` — list tenant orders
+* Employee:
+
+  * PATCH `/tenant/orders/{id}/status` — update order status
+* Customer:
+
+  * POST `/tenant/{id}/orders` — create order
+  * GET `/customer/orders` — view my orders
+
+---
+
+إذا تحب أعمل لك الآن أيًا من الآتي فورًا (أختر واحد أو أكثر) دون أسئلة إضافية:
+
+* أنشئ ملف **Seeder** كامل بالصلاحيات والأدوار التي اقترحتها.
+* أكتب لك **Policies** مثال (`OrderPolicy`) وMiddleware `EnsureTenant` للتحقق من العزل.
+* أكتب لك **Routes** وController skeletons (register, assignRole, protected endpoints) جاهزة للاستخدام.
+
+أي خيار تريد أن أبدأ به؟
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+====================================================================
+جميل — سأشرح كل وظيفة بالتفصيل (الغرض، كيف تظهر في الواجهة، كيف تخزنها في قاعدة البيانات، واجهات API مقترحة، أمثلة استعلامات/كود بلارفيل، ونقاط أمان/عمليات جانبية). أرتّب الشرح لأربعة أجزاء واضحة: **Settings، Reports، Payments، Roles & Permissions**.
+
+# System settings — إعدادات عامة للمنصة
+
+**الغرض:** تخزين إعدادات قابلة للتعديل دون إعادة نشر الكود: شعار، بوابات دفع مفعّلة، نصائح سياسية/قانونية، إعدادات البريد، إعدادات البريد الإلكتروني SMTP، إعدادات الـ email templates، إعدادات رسوم أو عمولة المنصة، تفعيل/تعطيل تسجيل التينانتز، إلخ.
+
+**واجهة المستخدم (UI):**
+
+* صفحة لوحة تحكم عامة للمسؤول: أقسام (General, Branding, Payments, Email, Features).
+* حقول مثل: Platform Name, Logo upload, Default currency, Commission rate, Allowed payment gateways (checkboxes), Maintenance mode toggle.
+
+**قاعدة البيانات (نموذج):**
+
+* طريقة بسيطة: جدول key-value:
+
+```sql
+settings
+- id
+- key (string) unique
+- value (text/json)
+- group (string) nullable
+- created_at, updated_at
+```
+
+* بديل: جدول مهيكل لكل مجموعة (مثلاً `payment_settings`).
+
+**Laravel — Migration مثال (مبسط):**
+
+```php
+Schema::create('settings', function (Blueprint $table) {
+  $table->id();
+  $table->string('key')->unique();
+  $table->text('value')->nullable();
+  $table->string('group')->nullable();
+  $table->timestamps();
+});
+```
+
+**API endpoints مقترح:**
+
+* `GET /api/admin/settings` — جلب كل الإعدادات (admin only)
+* `PUT /api/admin/settings` — تحديث دفعة من الإعدادات
+
+**مثال Controller (قراءة/تحديث):**
+
+```php
+public function update(Request $req) {
+  $data = $req->only(['platform_name','commission_rate','maintenance_mode']);
+  foreach($data as $key=>$val){
+    Setting::updateOrCreate(['key'=>$key], ['value'=>is_array($val)?json_encode($val):$val]);
+  }
+  return response()->json(['message'=>'Settings saved']);
+}
+```
+
+**نقاط عملية وأمان:**
+
+* خزّن بيانات حساسة مشفرة (API keys) باستخدام Laravel encryption (e.g. `encrypt()`).
+* استخدم caching (Redis) لقراءة الإعدادات لتقليل الاستعلامات.
+* حدد صلاحية الوصول (admin only) ولا تعرض مفاتيح داخل الواجهة.
+
+---
+
+# Reports — تقارير شاملة (مبيعات، مستخدمين، إلخ)
+
+**الغرض:** إعطاء المسؤول رؤية عن أداء المنصة: إجمالي الإيرادات، إيراد كل تينانت، عدد العملاء، نمو المستخدمين، معدل الإلغاءات، طلبات الدفع الناجحة/الفاشلة، متوسط قيمة الطلب (AOV)، إلخ.
+
+**لوحة التقارير (UI):**
+
+* لوحة قابلة للتصفية (date range, tenant, payment method).
+* بطاقات KPI (Total Revenue, Active Tenants, New Users this month).
+* جداول + رسوم بيانية زمنية (line chart revenue by day/month).
+* تصدير CSV/PDF.
+
+**نماذج SQL / Eloquent (أمثلة):**
+
+* إجمالي الإيرادات لفترة:
+
+```php
+$revenue = \DB::table('transactions')
+  ->whereBetween('created_at', [$from, $to])
+  ->where('status','paid')
+  ->sum('amount');
+```
+
+* الإيراد لكل تينانت (group by):
+
+```php
+$byTenant = \DB::table('transactions')
+  ->select('tenant_id', \DB::raw('SUM(amount) as revenue'))
+  ->where('status','paid')
+  ->groupBy('tenant_id')
+  ->orderByDesc('revenue')
+  ->get();
+```
+
+* مستخدمون جدد يومياً خلال 30 يوم:
+
+```php
+$newUsers = \DB::table('users')
+  ->select(\DB::raw('DATE(created_at) as day'), \DB::raw('COUNT(*) as count'))
+  ->whereBetween('created_at', [$from, $to])
+  ->groupBy('day')
+  ->get();
+```
+
+**هيكل الجداول المفيدة للتقارير:**
+
+* `transactions` (id, tenant\_id, user\_id, amount, currency, status, gateway\_id, created\_at)
+* `orders` (for product sales) إذا تطبق
+* `invoices`, `payouts`, `refunds`
+
+**Performance tips:**
+
+* استخدم **pre-aggregations** أو جداول ملخّصة (daily\_revenue) للتقارير الكبيرة.
+* استخدم الـ indexes على الأعمدة المستخدمة في where/groupBy (tenant\_id, created\_at, status).
+* استخدم cache للـ KPI التي تُحدَّث كل فترة (مثلاً كل 5 دقائق).
+
+**أمثلة رد JSON لخلاصة تقرير:**
+
+```json
+{
+  "total_revenue": 12500.50,
+  "active_tenants": 128,
+  "new_users_30_days": 542,
+  "revenue_by_tenant": [
+     {"tenant_id":"...","revenue":5400},
+     ...
+  ]
+}
+```
+
+---
+
+# Payments — متابعة الدفعيات والاسترجاعات (Refunds, Payouts)
+
+**الغرض:** التعامل مع تحصيل الأموال عبر بوابات دفع (Stripe, PayPal, etc.)، تسجيل معاملات، معالجة رد الأموال، دفع المستحقات للتينانت (payouts)، وإظهار حالة المدفوعات في التقارير.
+
+**تدفق عملي نموذجي:**
+
+1. العميل يختار الدفع → يُنشأ طلب (order) في DB مع status = `pending`.
+2. يوجه إلى بوابة الدفع (أو يرسل بيانات للـ gateway tokenization).
+3. بوابة الدفع تعيد رد (success/fail) → تسجّل transaction (status `paid` أو `failed`).
+4. بوابة الدفع ترسل Webhook إلى خدمتك للتحقق وتحديث حالة الدفع (very important).
+5. لمن يشتغل نظام تسوية للتينانت: المنصة تخصم عمولا ثم تُجري payouts دورية إلى أصحاب التينانت.
+
+**جداول مقترحة:**
+
+* `transactions`:
+
+  * id, order\_id, tenant\_id, user\_id, amount, currency, status (pending, paid, failed, refunded), gateway, gateway\_transaction\_id, metadata (json), created\_at
+* `payouts`:
+
+  * id, tenant\_id, amount, currency, status, scheduled\_at, processed\_at, gateway\_payout\_id
+
+**Webhook endpoint (Laravel example):**
+
+```php
+Route::post('/webhooks/payments/stripe', [PaymentWebhookController::class,'stripe']);
+```
+
+Controller يتحقق توقيع الـ webhook ثم يحدث transaction.
+
+**مثال بسيط لـ webhook handler (Stripe-like):**
+
+```php
+public function stripe(Request $req) {
+  // تحقق signature
+  $payload = $req->all();
+  $event = $payload['type'];
+  if($event === 'charge.succeeded'){
+     $gatewayId = $payload['data']['object']['id'];
+     // update transaction by gateway_transaction_id
+     Transaction::where('gateway_transaction_id',$gatewayId)->update(['status'=>'paid']);
+  }
+  return response()->json([],200);
+}
+```
+
+**Refunds & Payouts:**
+
+* رد المال (refund) عادة يتم بالاتصال بواجهة الـ gateway مع تخزين حالة الطلب كـ `refunded`.
+* payouts: منصة تجمع أرباح التينانت وتجري تحويلات دورية. قد تحتاج عملية KYC قبل دفع مستحقات التينانت.
+
+**نقاط أمان وامتثال:**
+
+* لا تخزن بيانات البطاقة الحساسة — استخدم توكنات الـ gateway.
+* اتبع متطلبات PCI إذا تعاملت مباشرة مع بيانات البطاقة.
+* تحقق من webhooks بتواقيع مزوّدة من البوابة.
+* استخدم idempotency keys عند تنفيذ عمليات دفع/رد لتجنب التنفيذ المكرر.
+
+---
+
+# Roles & Permissions — إنشاء/تعديل/حذف أدوار وصلاحيات
+
+**الغرض:** إدارة من يستطيع الوصول إلى أي جزء من النظام. مثال: `admin` (منصة كاملة)، `tenant_owner` (إدارة تينانت محدد)، `tenant_staff`، `customer`.
+
+**النهج الشائع:** استخدام حزمة مثل `spatie/laravel-permission` لأنها جاهزة وتدير roles & permissions وmiddlewares بسهولة. أو بناء نظام بسيط tables: roles, permissions, role\_permission, user\_role.
+
+**مخطط جداول مبسط:**
+
+* roles (id, name, guard\_name)
+* permissions (id, name, guard\_name)
+* role\_has\_permissions (role\_id, permission\_id)
+* model\_has\_roles (role\_id, model\_type, model\_id) — يربط المستخدم بالـ role
+
+**الاستخدام عبر Spatie:**
+
+```php
+$user->assignRole('admin');
+if($user->hasRole('admin')) { ... }
+if($user->can('system.tenants.delete')) { ... }
+```
+
+**Endpoints مقترحة:**
+
+* `GET /api/roles` — جلب الأدوار
+* `POST /api/roles` — إنشاء دور مع قائمة صلاحيات
+* `PUT /api/roles/{id}` — تعديل دور
+* `DELETE /api/roles/{id}` — حذف دور (تحقق قبل الحذف أن الدور ليس مستخدمًا)
+
+**دالة حذف الدور (مثال Laravel):**
+
+```php
+public function destroy($id)
+{
+  $role = Role::find($id);
+  if(!$role) return response()->json(['error'=>'Role not found'],404);
+
+  // لا تسمح بحذف الدور الأساسي أو دور مستخدمين
+  if(in_array($role->name, ['admin','super-admin'])) {
+    return response()->json(['error'=>'Cannot delete system role'],403);
+  }
+
+  if($role->users()->count() > 0) {
+    return response()->json(['error'=>'Role is assigned to users'],400);
+  }
+
+  $role->permissions()->detach();
+  $role->delete();
+
+  return response()->json(['message'=>'Role deleted'],200);
+}
+```
+
+**سياسات وأمان:**
+
+* فقط مسؤول النظام (system admin) يمكنه إنشاء/حذف الأدوار.
+* احتفظ بسجل (audit log) عند تغيير صلاحيات/أدوار: من غير ومتى.
+* لا تحذف دورًا استُخدم سابقًا — فك ربطه أولًا أو أرشفه.
+
+---
+
+## أمثلة عملية سريعة (ملخّص)
+
+* **تعديل عملة افتراضية:** Admin → Settings → `currency` → تُخزن في `settings` وتستخدم في كل العمليات.
+* **عرض تقرير إيراد اليوم:** Query على `transactions` حيث `status='paid'` ثم تجميع `SUM(amount)`.
+* **تنفيذ رد أموال:** Webhook أو API → استدعاء gateway refund → تحديث transaction `refunded=true`.
+* **منع حذف دور:** قبل `DELETE /roles/{id}` تحقق أن no users assigned and not system role.
+
+---
+
+## نصائح نهائية
+
+1. صمّم احتياطيًا: كل عملية تغير (settings, roles, deletes) يجب أن تُسجَّل في audit log.
+2. القياسات: استعمل أدوات مراقبة (Sentry, Horizon queues, Prometheus) لتتبع حالات الدفع والفشل.
+3. اختبارات: أكتب اختبارات وحدات ووظائف خاصة لحالات الحذف، refunds، وwebhooks.
+4. الأمان: لا تنسَ التحقق من الصلاحيات على كل endpoint (middleware + policy).
+
+---
+
+لو تريد، أقدر الآن:
+
+* أُولّف ملف Migration + Model + Controller جاهز لـ **settings** أو **transactions**، أو
+* أُجهّز مثالًا عمليًا لدالة حذف role مع اختبار PHPUnit، أو
+* أُنشئ سكيتش لواجهة الـ Admin (wireframe) للصفحات: Settings / Reports / Payments / Roles.
+
+أي خيار تريد أبدأ به الآن؟
+
