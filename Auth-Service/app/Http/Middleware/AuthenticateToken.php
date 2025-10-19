@@ -11,10 +11,8 @@ class AuthenticateToken
     public function handle($request, Closure $next)
     {
         try {
-            $token = JWTAuth::parseToken(); 
+            $token = JWTAuth::parseToken();
             $user = $token->authenticate();
-
-            // نمرر التوكن واليوزر للـ request
             $request->merge([
                 'auth_user' => $user,
                 'jwt_token' => (string) $token->getToken(),

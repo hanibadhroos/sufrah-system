@@ -15,6 +15,16 @@ use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 
 class TenantRepository implements TenantRepositoryInterface {
 
+
+    private $mainAuthUrl;
+    private $internalKey;
+    public function __construct()
+    {
+        $this->mainAuthUrl = config('services.auth_service');
+        $this->internalKey = config('services.internal_api_key');
+
+    }
+
     public function profile(){
         try{
 
@@ -128,7 +138,7 @@ class TenantRepository implements TenantRepositoryInterface {
                 return response()->json(['data'=>$branch], 200);
             }
             return response()->json(['error' => 'There are not any branches']);
-        }   
+        }
         catch(Exception $e){
             return response()->json(['error'=>'Error while get your barnches ' . $e->getMessage()], 400);
         }
@@ -149,7 +159,7 @@ class TenantRepository implements TenantRepositoryInterface {
             DB::beginTransaction();
             $branch = TenantBranch::create($validated);
             if($branch){
-                ////Then we add new user for it 
+                ////Then we add new user for it
                 $url = config('services.auth_service' . '/api/register', 'http://127.0.0.1:8001' . '/api/register');
                 $internalKey = config('services.internal_api_key');
                 $userData = $validated;
@@ -182,13 +192,12 @@ class TenantRepository implements TenantRepositoryInterface {
             DB::beginTransaction();
             $branch = TenantBranch::find($id)->delete();
             if($branch){
-                
+
                 /////Delete The User using Tenant Id.
                 $authUrl = config('services.auth_service') . '/api/user/delete';
-                $internalKey = config('services.internal_api_key');
                 $response = Http::withHeaders([
                     'Authorization' => $token,
-                    'X-API-KEY' => $internalKey,
+                    'X-API-KEY' => $this->internalKey,
                     'Accept' => 'application/json',
                 ])->post($authUrl, ['branchId' => $id]);
 
@@ -210,7 +219,7 @@ class TenantRepository implements TenantRepositoryInterface {
         }
     }
     public function updateBranch(Request $request, $id){
-        $validated = $request->validate([
+         $validated = $request->validate([
             'name' => 'required|string',
             'location' => 'required',
             'phone' => 'required',
@@ -218,13 +227,40 @@ class TenantRepository implements TenantRepositoryInterface {
 
         try{
             DB::beginTransaction();
-            $branch = TenantBranch::find($id)->update($validated);
+            $branch = TenantBranch::find($id);
+            $branch->update($validated);
+            $branch->save();
             if($branch){
                 //// Then update its data into users table.
-                // $user = 
+                $userUrl = $this->mainAuthUrl . '/user-by-branche/' . $id;
+                $user_id = Http::withHeaders(
+                    [
+                        'Authorization' => 'Bearer' .  JWTAuth::getToken(),
+                        'X-API-KEY' => $this->internalKey,
+                        'Accept' => 'application/json',
+                    ])->get($userUrl);
+                $token = JWTAuth::getToken();
+                $url = $this->mainAuthUrl . '/user/' . $user_id;
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer' . $token,
+                    'X-API-KEY' => $this->internalKey,
+                    'Accept' => 'application/json',
+                ])->withUrlParameters([
+                        'user_id'=>$user_id
+                ])->put($url . '/user/{user_id}',$validated);
+
+                if($response->successful()){
+                    DB::commit();
+                }
+                else{
+                    DB::rollBack();
+                    return response()->json(['error ' => 'Error while update branche user -->'. $response->reason()], $response->status());
+                }
+
             }
-        }        
+        }
         catch(Exception $e){
+            DB::rollBack();
             return response()->json(['error' => 'Error while update branch ' . $e->getMessage()], 400);
         }
     }

@@ -56,15 +56,32 @@ class TenantController extends Controller
         DB::beginTransaction();
         try{
 
+            /////Create Tenant
             $data['password'] = Hash::make($request->password);
+            $tenant = $this->tenant_Repo->create($data);
+
+
+            /////Create Auth URL to add new user feald for this tenant.
+            $authUrl = config('services.auth_service' . '/api/register', 'http://127.0.0.1:8001' . '/api/register');
+            $internalKey = config('services.internal_api_key');
+            $userData['tenant_id'] = $tenant->id;
+
+            $response = Http::withHeaders([
+                'X-API-KEY' => $internalKey,
+                'Accept' => 'application/json'
+            ])->post($authUrl,$userData);
 
             /////Create Tenant
-            $tenant = $this->tenant_Repo->create($data);
+            // $data['password'] = Hash::make($request->password);
+            // // $data['owner_id'] = $response->json('user')['id'];
+            // $tenant = $this->tenant_Repo->create($data);
 
             ////Now we add this tenant to branches table.
             $branch = TenantBranch::create([
                 'id'=>Str::uuid(),
                 'name' => $tenant->name . 'Main branch',
+                'email'=> $request->email,
+                'password'=> Hash::make($request->password),
                 'location' => $tenant->location,
                 'tenant_id' => $tenant->id,
                 'phone' => $tenant->phone
@@ -74,17 +91,6 @@ class TenantController extends Controller
                 DB::rollBack();
                 return response()->json(['error'=> 'Error while add branch'], 400);
             }
-
-            /////Create Auth URL to add new user feald for this tenant.
-            $userData['tenant_id'] = $tenant->id;
-            $authUrl = config('services.auth_service' . '/api/register', 'http://127.0.0.1:8001' . '/api/register');
-            $internalKey = config('services.internal_api_key');
-
-            $response = Http::withHeaders([
-                'X-API-KEY' => $internalKey,
-                'Accept' => 'application/json'
-            ])->post($authUrl,$userData);
-
 
             if($response->successful()){
                 DB::commit();

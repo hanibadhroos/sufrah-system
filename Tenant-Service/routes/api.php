@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\TenantBrancheController;
 use App\Http\Controllers\TenantController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -31,4 +32,6 @@ Route::middleware(['auth.jwt', 'admin'])->group(function(){
 Route::middleware(['auth.jwt', 'tenant'])->group(function(){
     Route::put('/updateProfile/{id}', [TenantController::class, 'updateProfile']);
     Route::get('/profile', [TenantController::class, 'profile']);
+    Route::put('/branche/update/{id}', [TenantBrancheController::class, 'update']);
+
 });

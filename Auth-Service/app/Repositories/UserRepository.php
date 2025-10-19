@@ -65,4 +65,18 @@ class UserRepository implements UserRepositoryInterface {
             return response()->json(['error'=> 'Error while get all users ---> ' . $e->getMessage()], 400);
         }
     }
+
+    ////Get user by tenant id
+    public function getUserByBrancheId($tenant_id){
+        try{
+            $user = User::where('tenant_id', $tenant_id)->first();
+            if($user){
+                return response()->json($user, 200);
+            }
+            return response()->json(['error'=>'user not found'], 400);
+        }
+        catch(Exception $e){
+            return response()-> json(['error' => $e->getMessage()], 500);
+        }
+    }
 }

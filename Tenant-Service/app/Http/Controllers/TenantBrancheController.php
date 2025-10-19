@@ -1,0 +1,18 @@
+<?php
+
+namespace App\Http\Controllers;
+
+use App\Repositories\TenantRepository;
+use Illuminate\Http\Request;
+
+class TenantBrancheController extends Controller
+{
+    private TenantRepository $tenant_repository;
+    public function __construct(TenantRepository $tenant_repository)
+    {
+        $this->tenant_repository = $tenant_repository;
+    }
+    public function update(Request $request,$id){
+        return $this->tenant_repository->updateBranch($request, $id);
+    }
+}

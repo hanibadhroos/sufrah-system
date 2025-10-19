@@ -5,20 +5,24 @@ use App\Http\Controllers\RolePermissionController;
 use App\Http\Controllers\UserController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
-
-
+use Spatie\Permission\Contracts\Role;
 
 Route::post('/register', [AuthController::class, 'store'])
      ->middleware('internal.api');
 /////Login Route
 Route::post('login', [AuthController::class, 'login']);
+Route::middleware('auth.jwt')->group(function(){
+    Route::get('/me', [AuthController::class, 'me']);
+    Route::put('/user/{user_id}', [UserController::class, 'update']);
+});
 
-Route::get('/me', [AuthController::class, 'me'])->middleware('auth.jwt');
 
 
 Route::middleware(['auth.jwt', 'admin'])->group(function () {
     Route::delete('/user/delete', [UserController::class, 'delete']);
     Route::get('/user/all', [UserController::class, 'allUsers']);
+    /////Get user by tenant id
+    Route::get('/user-by-branche/{branche_id}', [UserController::class, 'getUserByBrancheId']);
 
     ////Role And permission APIs
     Route::controller(RolePermissionController::class)->group(function(){

@@ -11,14 +11,15 @@ class AuthenticateToken
     {
         try {
             $payload = JWTAuth::parseToken()->getPayload();
-
             $request->merge([
-                'jwt_token' => (string) JWTAuth::getToken(),
-                'userId'=> $payload->get('id'),
-            ]
-        );
+                    'jwt_token' => (string) JWTAuth::getToken(),
+                    'userId'=> $payload->get('id'),
+                    'tenant_id'=> $payload->get('tenant_id')
+                ]
+            );
 
-        } catch (\Exception $e) {
+        }
+        catch (\Exception $e) {
             return response()->json([
                 'error'   => 'Unauthorized - Invalid or Expired Token',
                 'message' => $e->getMessage()

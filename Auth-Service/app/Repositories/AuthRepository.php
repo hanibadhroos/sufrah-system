@@ -49,13 +49,13 @@ class AuthRepository implements AuthRepositoryInterface
         ]);
 
         ////We get branch id from branches table using tenant id for add it into token.
-        $branch_id = TenantBranch::where('tenant_id', $request->tenant_id)->value('id');
+        // $branch_id = TenantBranch::where('tenant_id', $request->tenant_id)->value('id');
         ////If role = tenant then create token with role and tenant id.
         if($request->role == 'tenant'){
             $token = JWTAuth::claims([
                 'role' => $user->role,
                 'tenant_id' => $user->tenant_id,
-                'branch_id' => $branch_id,
+                // 'branch_id' => $branch_id,
             ])->fromUser($user);
         }
 
@@ -94,65 +94,44 @@ class AuthRepository implements AuthRepositoryInterface
         ], 201);
     }
 
-    public function login(Request $request)
-    {
-        $credentials = $request->only('email', 'password');
+public function login(Request $request)
+{
+    $credentials = $request->only('email', 'password');
 
-        if (!$token = JWTAuth::attempt($credentials)) {
-            return response()->json(['message' => 'Invalid credentials'], 401);
-        }
-
-        $ttl = config('jwt.ttl') ?? 0; // لو 0 معناها ما ينتهي
-
-        // جلب المستخدم الحالي
-        $user = auth()->user();
-
-        ////If role = tenant then create token with role and tenant id.
-        if($request->role == 'tenant'){
-
-            $token = JWTAuth::claims([
-                'role' => $user->role,
-                'tenant_id' => $user->tenant_id,
-                'id' => $user->id,
-            ])->fromUser($user);
-        }
-
-        ////If role = customer then create token with role and customer id.
-        elseif($request->role == 'branch'){
-            $token = JWTAuth::claims([
-                'role' => $user->role,
-                'branch_id' => $user->branch_id,
-                'id' => $user->id,
-            ])->fromUser($user);
-        }
-
-        ////If role = customer then create token with role and customer id.
-        elseif($request->role == 'customer'){
-            $token = JWTAuth::claims([
-                'role' => $user->role,
-                'customer_id' => $user->tenant_id,
-                'id' => $user->id,
-            ])->fromUser($user);
-        }
-
-        $token = JWTAuth::claims([
-            'role' => $user->role,
-
-        ])->fromUser($user);
-
-        // توليد توكن مع role
-        // $token = JWTAuth::claims([
-        //     'role' => $user->role,
-        //     'id' => $user->id,
-        // ])->fromUser($user);
-
-
-        return response()->json([
-            'access_token' => $token,
-            'token_type'   => 'bearer',
-            'expires_in'   => $ttl > 0 ? $ttl * 60 : null, // ثواني أو null لو غير منتهي
-        ]);
+    if (!$token = JWTAuth::attempt($credentials)) {
+        return response()->json(['message' => 'Invalid credentials'], 401);
     }
+
+    $user = auth()->user();
+
+    // تحديد الـ claims الديناميكية حسب الدور
+    $claims = [
+        'id' => $user->id,
+        'role' => $user->role,
+    ];
+
+    if ($user->role === 'tenant' && $user->tenant_id) {
+        $claims['tenant_id'] = $user->tenant_id;
+    }
+
+    if ($user->role === 'branch' && $user->branch_id) {
+        $claims['branch_id'] = $user->branch_id;
+    }
+
+    if ($user->role === 'customer' && $user->customer_id) {
+        $claims['customer_id'] = $user->customer_id;
+    }
+
+    // إنشاء التوكن
+    $token = JWTAuth::claims($claims)->fromUser($user);
+
+    return response()->json([
+        'access_token' => $token,
+        'token_type'   => 'bearer',
+        'expires_in'   => null, // اجعلها null لو تبيها غير منتهية
+    ]);
+}
+
 
 
     public function logout()

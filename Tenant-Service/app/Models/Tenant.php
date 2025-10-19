@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Services\HttpClientService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -17,4 +18,14 @@ class Tenant extends Model
     protected $hidden = [
         'password'
     ];
+
+
+    public function owner()
+    {
+        // استدعاء API عند الحاجة
+        return app(HttpClientService::class)->get("http://auth-service/api/users/{$this->owner_id}")->json();
+    }
+
+
+
 }

@@ -19,8 +19,18 @@ class UserController extends Controller
         return $this->user_repository->delete($request);
     }
 
+    public function update($user_id, Request $request){
+
+        echo $user_id;exit;
+        $user = User::find($user_id)->update($request);
+    }
+
     public function allUsers(){
         return $this->user_repository->allUsers();
     }
 
+    /////Get user by tenant id
+    public function getUserByBrancheId($tenant_id){
+        return $this->user_repository->getUserByBrancheId($tenant_id);
+    }
 }
