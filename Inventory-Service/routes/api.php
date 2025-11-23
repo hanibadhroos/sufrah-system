@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\InventoryContoller;
 use App\Http\Controllers\SupplierContoller;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -23,4 +24,5 @@ Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
 Route::middleware(['tenant', 'auth.jwt'])->group(function(){
 
     Route::apiResource('/suppliers', SupplierContoller::class);
+    Route::apiResource('/inventories', InventoryContoller::class);
 });

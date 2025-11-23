@@ -24,7 +24,13 @@ Route::middleware(['auth.jwt', 'admin'])->group(function(){
     //// Tenant APIs for admin
     Route::delete('/tenant/delete/{id}', [TenantController::class, 'destroy']);
     Route::get('/tenants/all',[TenantController::class, 'index']);
-    Route::post('/tenants', [TenantController::class, 'store']);
+    ////Register new tenant.
+    Route::post('/tenant-register', [TenantController::class, 'store'])
+     ->middleware(['internal.api', 'admin']);
+
+
+    //// Branch Routes.
+    Route::post('/add-branch', [TenantBrancheController::class, 'store']);
 });
 
 

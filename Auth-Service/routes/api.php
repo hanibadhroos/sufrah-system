@@ -7,8 +7,8 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 use Spatie\Permission\Contracts\Role;
 
-Route::post('/register', [AuthController::class, 'store'])
-     ->middleware('internal.api');
+// Route::post('/tenant-register', [AuthController::class, 'store'])
+//      ->middleware('internal.api');
 /////Login Route
 Route::post('login', [AuthController::class, 'login']);
 Route::middleware('auth.jwt')->group(function(){

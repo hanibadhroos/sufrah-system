@@ -12,6 +12,8 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Http;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
+use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Facades\Log;
 
 class TenantRepository implements TenantRepositoryInterface {
 
@@ -52,8 +54,115 @@ class TenantRepository implements TenantRepositoryInterface {
         }
     }
 
-    public function create(array $data) {
-        return Tenant::create($data);
+    public function create(Request $request) {
+        // return Tenant::create($data);
+        
+        $data = $request->validate([
+            'name' => 'required',
+            'type' => 'nullable|string',
+            'email'=>'required|email',
+            'password' => 'required|string|min:6',
+            'logo'=>'required',
+            'payment_method'=>'required|string',
+            'location'=>'required',
+            'status'=>'nullable',
+            'cancel_cutoff_minutes'=>'required|string',
+            
+        ]);
+        $data['id'] = Str::uuid()->toString();
+
+        $ownerData= $request->validate([
+            'name' => 'required|string',
+            'email' => 'required|email',
+            'password' => 'required|string|min:6',
+            'role' => 'nullable|string',
+            'phone'=> 'required',
+        ]);
+
+
+
+
+        DB::beginTransaction();
+        try{
+
+            /////Create Tenant
+            $data['password'] = Hash::make($request->password);
+            $tenant =  Tenant::create($data);
+            if(!$tenant){
+                DB::rollBack();
+                return response()->json(['error'=> 'create the tenant failed.'], 400);
+            }
+
+
+            ////Now we add this tenant to branches table.
+            $branch = TenantBranch::create([
+                'id'=>Str::uuid()->toString(),
+                'name' => $tenant->name . 'Main branch',
+                'email'=> $request->email,
+                'password'=> Hash::make($request->password),
+                'location' => $tenant->location,
+                'tenant_id' => $tenant->id,
+                'phone' => $tenant->phone,
+                // 'owner_id' => $response->json()['id'],  //// We add it when the response for create owner into users table success .
+            ]);
+            if(!$branch){
+                DB::rollBack();
+                return response()->json(['error'=> 'Error while add branch'], 400);
+            }
+            ////Create a password, id, role, and tenant_id for the user which will crate.
+            $ownerData['password'] = Hash::make($request->password);
+            $ownerData['id'] = Str::uuid()->toString();
+            $ownerData['role'] = 'tenant';
+            $ownerData['tenant_id'] = $tenant->id;
+
+            ////adding owner date in users table.
+            /////Create Auth URL to add new user feald for this tenant.
+            $authUrl = config('services.auth_service' . '/api/register', 'http://127.0.0.1:8001' . '/api/register');
+            $internalKey = config('services.internal_api_key');
+            $response = Http::withHeaders([
+                'X-API-KEY' => $internalKey,
+                'Accept' => 'application/json'
+            ])->post($authUrl,$ownerData);
+
+            if($response -> successful()){
+                $owner_id = $response->json()['user']['original']['data']['user']['id'];
+                //// الان بعدما انشانا الميستخدم نقوم بتحديث التينانت السابق واضافة له وونر ايدي
+                $tenant_for_update =  Tenant::where('id',$tenant->id)->update(['owner_id' =>$owner_id ]);
+
+                if(!$tenant_for_update){
+                    return response()->json(['error'=> 'can not add owner id to this tenant --> '], 400);
+                }
+
+                ///// Now add owner id to the previous tenant_branches 
+                $branch_for_update =  TenantBranch::where('id',$branch->id)->update(['owner_id' =>$owner_id]);
+                if(!$branch_for_update){
+                    DB::rollBack();
+                    return response()->json('error ==> While add owner id to branch for this tenant.', 500);
+                }
+            }
+            else{
+                DB::rollBack();
+                return response()->json('error while register the user for this tenant ===> ' . $response->json()['message']);
+            }
+
+            //// إذا فشل إنشاء المستخدم في Auth Service -> تراجع عن إنشاء التينانت
+            DB::commit();
+
+            return response()->json([
+                'message'=> 'create tenant successfully',
+                'owner'=>$response->json(),
+                'tenant' => $tenant,
+            ], $response->status() ?: 200);
+
+        }
+        catch(Exception $e){
+            DB::rollBack();
+            Log::error("Tenant Creation failed: " . $e->getMessage(), [
+                'trace'=> $e->getTraceAsString()
+            ]);
+            return response()->json(['error' => 'Server error', 'message' => $e->getMessage(), 'trace' => $e->getTraceAsString()], 500);
+
+        }
     }
     public function find($id) {
         return Tenant::find($id);
@@ -149,13 +258,14 @@ class TenantRepository implements TenantRepositoryInterface {
             $validated = $request->validate([
                 'name' => 'required|string',
                 'password' => 'required|string|min:6',
-                'role' => 'nullable|string',
+                'email' => 'required',
                 'location' => 'required',
                 'phone' => 'required',
+                'tenant_id' => 'required'
             ]);
 
             $validated['id'] = Str::uuid();
-            $validated['tenant_id'] = JWTAuth::parseToken()->getPayload()->get('tenant_id');
+            // $validated['tenant_id'] = JWTAuth::parseToken()->getPayload()->get('tenant_id');
             DB::beginTransaction();
             $branch = TenantBranch::create($validated);
             if($branch){
@@ -223,41 +333,71 @@ class TenantRepository implements TenantRepositoryInterface {
             'name' => 'required|string',
             'location' => 'required',
             'phone' => 'required',
+            'email'=> 'required|email',
+            'password' => 'required',
         ]);
 
         try{
             DB::beginTransaction();
+
+
             $branch = TenantBranch::find($id);
-            $branch->update($validated);
+            $branch->update([
+                'name'=> $request->name,
+                'location'=> $request->location,
+                'phone'=> $request->phone,
+            ]);
             $branch->save();
-            if($branch){
-                //// Then update its data into users table.
-                $userUrl = $this->mainAuthUrl . '/user-by-branche/' . $id;
-                $user_id = Http::withHeaders(
-                    [
-                        'Authorization' => 'Bearer' .  JWTAuth::getToken(),
-                        'X-API-KEY' => $this->internalKey,
-                        'Accept' => 'application/json',
-                    ])->get($userUrl);
-                $token = JWTAuth::getToken();
-                $url = $this->mainAuthUrl . '/user/' . $user_id;
-                $response = Http::withHeaders([
-                    'Authorization' => 'Bearer' . $token,
-                    'X-API-KEY' => $this->internalKey,
-                    'Accept' => 'application/json',
-                ])->withUrlParameters([
-                        'user_id'=>$user_id
-                ])->put($url . '/user/{user_id}',$validated);
 
-                if($response->successful()){
-                    DB::commit();
-                }
-                else{
-                    DB::rollBack();
-                    return response()->json(['error ' => 'Error while update branche user -->'. $response->reason()], $response->status());
-                }
+            ////Then we update users table which owner this branch.
+            $owner_id = $branch->owner_id;
+            //// Response code for update  user.
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer' . $token,
+                'X-API-KEY' => $this->internalKey,
+                'Accept' => 'application/json',
+            ])->withUrlParameters([
+                    'user_id'=>$owner_id
+            ])->put($url . '/user/{owner_id}', ['email'=> $request->email, 'password'=> $request->password]);
 
+            if($response->successful()){
+                DB::commit();
             }
+            else{
+                DB::rollBack();
+                return response()->json(['error ' => 'Error while update branche user -->'. $response->reason()], $response->status());
+            }
+
+            // if($branch){
+            //     //// Then update its data into users table.
+            //     $userUrl = $this->mainAuthUrl . '/user-by-branche/' . $id;
+            //     $user_id = Http::withHeaders(
+            //         [
+            //             'Authorization' => 'Bearer' .  JWTAuth::getToken(),
+            //             'X-API-KEY' => $this->internalKey,
+            //             'Accept' => 'application/json',
+            //         ])->get($userUrl);
+            //     $token = JWTAuth::getToken();
+            //     $url = $this->mainAuthUrl . '/user/' . $user_id;
+
+            //     //// Response code for update  user.
+            //     $response = Http::withHeaders([
+            //         'Authorization' => 'Bearer' . $token,
+            //         'X-API-KEY' => $this->internalKey,
+            //         'Accept' => 'application/json',
+            //     ])->withUrlParameters([
+            //             'user_id'=>$user_id
+            //     ])->put($url . '/user/{user_id}',$validated);
+
+            //     if($response->successful()){
+            //         DB::commit();
+            //     }
+            //     else{
+            //         DB::rollBack();
+            //         return response()->json(['error ' => 'Error while update branche user -->'. $response->reason()], $response->status());
+            //     }
+
+            // }
         }
         catch(Exception $e){
             DB::rollBack();

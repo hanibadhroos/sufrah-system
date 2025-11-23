@@ -5,7 +5,7 @@ use Illuminate\Http\Request;
 
 interface TenantRepositoryInterface {
     public function profile();
-    public function create(array $data);
+    public function create(Request $request);
     public function find($id);
     public function destroy($id, $token);
     public function index();

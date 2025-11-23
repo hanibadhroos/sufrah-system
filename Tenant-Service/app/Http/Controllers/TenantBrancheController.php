@@ -12,6 +12,11 @@ class TenantBrancheController extends Controller
     {
         $this->tenant_repository = $tenant_repository;
     }
+
+    public function store(Request $request){
+        return $this->tenant_repository->addBranch($request);
+    }
+
     public function update(Request $request,$id){
         return $this->tenant_repository->updateBranch($request, $id);
     }
