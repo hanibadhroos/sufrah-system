@@ -20,9 +20,13 @@ class UserController extends Controller
     }
 
     public function update($user_id, Request $request){
-
-        echo $user_id;exit;
-        $user = User::find($user_id)->update($request);
+        $validated = $request->validate([
+            'email'=>'required|email',
+            'password' => 'required|max:8'
+        ]);
+        $user = User::where('id' ,$user_id)->first();
+        $user->update($validated);
+        return response()->json( ['message'=>'user updated successfully.', 'user' => $user]);
     }
 
     public function allUsers(){

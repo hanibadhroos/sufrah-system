@@ -17,6 +17,6 @@ interface TenantRepositoryInterface {
     public function allBranches();
     public function addBranch(Request $request);
     public function deleteBranch($id, $token);
-    public function updateBranch(Request $request, $id);
+    public function updateBranch($id, Request $request);
     
 }

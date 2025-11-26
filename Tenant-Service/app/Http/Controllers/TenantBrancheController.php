@@ -19,7 +19,7 @@ class TenantBrancheController extends Controller
     }
 
 
-    public function update(Request $request,$id){
-        return $this->tenant_repository->updateBranch($request, $id);
+    public function update($id, Request $request){
+        return $this->tenant_repository->updateBranch($id, $request);
     }
 }
