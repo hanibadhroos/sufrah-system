@@ -18,7 +18,7 @@ class AuthRepository implements AuthRepositoryInterface
 {
     public function __construct(private HttpClientService $httpClient) {}
 
-    // تسجيل مستخدم جديد
+    // تسجيل مستخدم جديد للعميل او موظف او فرع
     public function register(Request $request)
     {
         $data = $request->validate([
@@ -28,33 +28,34 @@ class AuthRepository implements AuthRepositoryInterface
             'role' => 'required|string',
             'phone'=> 'required|string',
             'tenant_id'=>'nullable|string',
-            'branch_id'=>'nullable|string',
+            'user_branch_id'=>'nullable|string',
             'customer_id'=>'nullable|string',
+            'emp_id' => 'nullabel'
         ]);
 
         // $data['password'] = Hash::make(trim($data['password']));
         // $data['id'] = Str::uuid();
 
-
         $user = User::create([
             'id'        => Str::uuid(),
             'name'      => $request->name,
             'email'     => $request->email,
-            'password' => $request->password,
+            'password' => Hash::make($request->password),
             'role'      => $request->role,
             'phone'     => $request->phone,
-            'tenant_id' => $request->tenant_id,
-            'branch_id' => $request->branch_id,
-            'customer_id' => $request->customer_id,
+            'tenant_id' => $request->tenant_id?? null,
+            'branch_id' => $request->id ?? null,
+            'customer_id' => $request->customer_id?? null,
+            'emp_id' => $request->emp_id?? null,
         ]);
 
         ////We get branch id from branches table using tenant id for add it into token.
         // $branch_id = TenantBranch::where('tenant_id', $request->tenant_id)->value('id');
-        ////If role = tenant then create token with role and tenant id.
-        if($request->role == 'tenant'){
+        ////If role = employee then create token with role and tenant id.
+        if($request->role == 'employee'){
             $token = JWTAuth::claims([
                 'role' => $user->role,
-                'tenant_id' => $user->tenant_id,
+                'emp_id' => $user->emp_id,
                 // 'branch_id' => $branch_id,
             ])->fromUser($user);
         }
@@ -71,7 +72,7 @@ class AuthRepository implements AuthRepositoryInterface
         elseif($request->role == 'customer'){
             $token = JWTAuth::claims([
                 'role' => $user->role,
-                'customer_id' => $user->tenant_id,
+                'customer_id' => $user->customer_id,
             ])->fromUser($user);
         }
 
@@ -80,7 +81,7 @@ class AuthRepository implements AuthRepositoryInterface
 
         ])->fromUser($user);
 
-        return response()->json([
+        return [
             'meta' => [
                 'code' => 201,
                 'status' => 'success',
@@ -91,7 +92,7 @@ class AuthRepository implements AuthRepositoryInterface
                 'token' => $token
 
             ]
-        ], 201);
+        ];
     }
 
 public function login(Request $request)

@@ -253,26 +253,35 @@ class TenantRepository implements TenantRepositoryInterface {
         }
     }
 
+
+
+    /////Branch management.
     public function addBranch(Request $request){
         try{
+            // echo $request; exit;
             $validated = $request->validate([
                 'name' => 'required|string',
-                'password' => 'required|string|min:6',
+                'password' => 'required|string|min:8',
                 'email' => 'required',
                 'location' => 'required',
                 'phone' => 'required',
-                'tenant_id' => 'required'
+                'branch_tenant_id' => 'required'
             ]);
 
-            $validated['id'] = Str::uuid();
-            // $validated['tenant_id'] = JWTAuth::parseToken()->getPayload()->get('tenant_id');
+            $validated['password'] = Hash::make($request->password);
+            $validated['tenant_id'] = $request->branch_tenant_id;
+            $validated['id'] = Str::uuid()->toString();
+            $validated['owner_id'] = Tenant::where('id' ,$request->branch_tenant_id)->value('owner_id');
             DB::beginTransaction();
             $branch = TenantBranch::create($validated);
             if($branch){
-                ////Then we add new user for it
+                ////Then we add new user for it 
                 $url = config('services.auth_service' . '/api/register', 'http://127.0.0.1:8001' . '/api/register');
                 $internalKey = config('services.internal_api_key');
                 $userData = $validated;
+                $userData['user_branch_id'] = $branch->id;
+                // print_r($userData); exit;
+                $userData['role'] = 'branch';
 
                 $response = Http::withHeaders([
                     'X-API-KEY' => $internalKey,
@@ -294,7 +303,7 @@ class TenantRepository implements TenantRepositoryInterface {
             }
         }
         catch(Exception $e){
-            return response()->json(['error' => 'Error while add new branch ' . $e->getMessage()], 400);
+            return response()->json(['error' => 'Error while add new branch ' . $e->getMessage(), 'Trace' => $e->getTraceAsString()], 500);
         }
     }
     public function deleteBranch($id, $token){

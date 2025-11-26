@@ -23,10 +23,11 @@ class AuthController extends Controller
     public function store(Request $request){
 
         try{
-            $user = $this->auth_repository->Register($request);
+            
+            $user = $this->auth_repository->register($request);
 
             if($user){
-                return response()->json(['message'=>'User created successfully', 'user'=>$user], 201);
+                return ['message'=>'User created successfully', 'user'=>$user];
             }
         }
 
@@ -35,7 +36,7 @@ class AuthController extends Controller
                 'trace' => $e->getTraceAsString()
             ]);
 
-            return response()->json(['error'=>'Register Error', 'message' => $e->getMessage()], 402);
+            return ['error'=>'Register Error', 'message' => $e->getMessage()];
         }
     }
 

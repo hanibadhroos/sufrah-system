@@ -12,7 +12,7 @@ class Tenant extends Model
 
     public $incrementing = false;
     protected $keyType = 'string';
-    protected $fillable = ['id', 'name', 'email', 'password', 'logo', 'payment_method','location', 'status', 'cancel_cutoff_minutes', 'type'];
+    protected $fillable = ['id', 'name', 'email', 'password', 'logo', 'payment_method','location', 'status', 'cancel_cutoff_minutes', 'type', 'owner_id'];
     public $table = 'tenants';
 
     protected $hidden = [
@@ -26,6 +26,9 @@ class Tenant extends Model
         return app(HttpClientService::class)->get("http://auth-service/api/users/{$this->owner_id}")->json();
     }
 
+    public function branchs(){
+        return $this->hasMany(Branch::class);
+    }
 
 
 }

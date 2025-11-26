@@ -10,9 +10,13 @@ class TenantBranch extends Model
     use HasFactory;
 
     protected $table = 'tenant_branches';
-    protected $fillable = ['id', 'name', 'location', 'tenant_id', 'phone', 'email', 'password'];
+    protected $fillable = ['id', 'name', 'location', 'tenant_id', 'phone', 'email', 'password', 'owner_id'];
 
     protected $keyType = 'string';
     public $incrementing = false;
 
+
+    function tenant(){
+        return $this->beLongsTo(Tenant::class);
+    }
 }
