@@ -30,7 +30,11 @@ Route::middleware(['auth.jwt', 'admin'])->group(function(){
 
 
     //// Branch Routes.
-    Route::post('/add-branch', [TenantBrancheController::class, 'store']);
+    Route::apiResource('/branch', TenantBrancheController::class);
+    // Route::post('/branch', [TenantBrancheController::class, 'store']);
+    // Route::put('/updata')
+    // Route::put('branch/{id}', [TenantBrancheController::class, 'update']);
+    
 });
 
 

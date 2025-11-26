@@ -337,7 +337,7 @@ class TenantRepository implements TenantRepositoryInterface {
             return response()->json(['error' => 'Error while delete the branch ' . $e->getMessage()], 400);
         }
     }
-    public function updateBranch(Request $request, $id){
+    public function updateBranch($id, Request $request){
          $validated = $request->validate([
             'name' => 'required|string',
             'location' => 'required',
@@ -358,19 +358,20 @@ class TenantRepository implements TenantRepositoryInterface {
             ]);
             $branch->save();
 
-            ////Then we update users table which owner this branch.
+            $token = $request->bearerToken();
+            $url = config('services.auth_service' , 'http://127.0.0.1:8001' );
+            ////Then we update users table which owner this branch. ----> update email and password.
             $owner_id = $branch->owner_id;
             //// Response code for update  user.
             $response = Http::withHeaders([
-                'Authorization' => 'Bearer' . $token,
+                'Authorization' => 'Bearer ' . $token,
                 'X-API-KEY' => $this->internalKey,
                 'Accept' => 'application/json',
-            ])->withUrlParameters([
-                    'user_id'=>$owner_id
-            ])->put($url . '/user/{owner_id}', ['email'=> $request->email, 'password'=> $request->password]);
+            ])->put($url . '/api/user/' . $owner_id, ['email'=> $request->email, 'password'=> $request->password]);
 
             if($response->successful()){
                 DB::commit();
+                return response()->json(['message' => 'Branch updated successfully.', 'Branch'=> $branch, 'user' => $response->json()], 201);
             }
             else{
                 DB::rollBack();
